@@ -1,7 +1,5 @@
 streamlit
 pandas
-plotly
 python-dotenv
-resend
 qrcode
-pillow
+psycopg2-binary
