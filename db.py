@@ -54,9 +54,13 @@ def close_all_connections():
 
 # ---------------- USER FUNCTIONS ----------------
 def register_user(username, email, password):
-    conn = get_connection()
-    cur = conn.cursor()
+    conn = None
+    cur = None
+
     try:
+        conn = get_connection()
+        cur = conn.cursor()
+
         cur.execute(
             """
             INSERT INTO users (username, email, password)
@@ -64,49 +68,103 @@ def register_user(username, email, password):
             """,
             (username, email, password),
         )
+
         conn.commit()
         return True
+
     except Exception as e:
         print("register_user error:", e)
-        conn.rollback()
+
+        if conn:
+            conn.rollback()
+
         return False
+
     finally:
-        cur.close()
-        return_connection(conn)
+        if cur:
+            cur.close()
+
+        if conn:
+            return_connection(conn)
 
 
 def login_user(username_or_email, password):
     conn = get_connection()
     cur = conn.cursor()
+
     try:
         cur.execute(
             """
             SELECT id
             FROM users
             WHERE (username = %s OR email = %s)
-              AND password = %s
+            AND password = %s
             """,
             (username_or_email, username_or_email, password),
         )
+
         row = cur.fetchone()
         return row[0] if row else None
+
     except Exception as e:
         print("login_user error:", e)
         return None
+
     finally:
         cur.close()
         return_connection(conn)
 
 
 # ---------------- GROUP FUNCTIONS ----------------
+def create_group(user_id, group_name):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            """
+            INSERT INTO groups (user_id, name)
+            VALUES (%s, %s)
+            """,
+            (user_id, group_name),
+        )
+
+        conn.commit()
+        return True
+
+    except Exception as e:
+        print("create_group error:", e)
+
+        if conn:
+            conn.rollback()
+
+        return False
+
+    finally:
+        if cur:
+            cur.close()
+
+        if conn:
+            return_connection(conn)
+
+
 def get_user_groups(user_id):
     conn = get_connection()
+
     try:
-        query = "SELECT id, name FROM groups WHERE user_id = %s ORDER BY id"
+        query = """
+        SELECT id, name
+        FROM groups
+        WHERE user_id = %s
+        ORDER BY id
+        """
+
         return pd.read_sql(query, conn, params=(user_id,))
+
     except Exception as e:
         print("get_user_groups error:", e)
         return pd.DataFrame(columns=["id", "name"])
+
     finally:
         return_connection(conn)
 
@@ -115,6 +173,7 @@ def get_user_groups(user_id):
 def add_friend(user_id, group_id, name, upi_id):
     conn = get_connection()
     cur = conn.cursor()
+
     try:
         cur.execute(
             """
@@ -123,12 +182,15 @@ def add_friend(user_id, group_id, name, upi_id):
             """,
             (user_id, group_id, name, upi_id),
         )
+
         conn.commit()
         return True
+
     except Exception as e:
         print("add_friend error:", e)
         conn.rollback()
         return False
+
     finally:
         cur.close()
         return_connection(conn)
@@ -136,6 +198,7 @@ def add_friend(user_id, group_id, name, upi_id):
 
 def get_friends(user_id, group_id):
     conn = get_connection()
+
     try:
         query = """
         SELECT id, name, upi_id
@@ -143,10 +206,13 @@ def get_friends(user_id, group_id):
         WHERE user_id = %s AND group_id = %s
         ORDER BY id
         """
+
         return pd.read_sql(query, conn, params=(user_id, group_id))
+
     except Exception as e:
         print("get_friends error:", e)
         return pd.DataFrame(columns=["id", "name", "upi_id"])
+
     finally:
         return_connection(conn)
 
@@ -155,11 +221,18 @@ def get_friends(user_id, group_id):
 def add_expense(user_id, group_id, expense_date, description, paid_by, amount, split_ids):
     conn = get_connection()
     cur = conn.cursor()
+
     try:
         split_names = []
+
         for fid in split_ids:
-            cur.execute("SELECT name FROM friends WHERE id = %s", (fid,))
+            cur.execute(
+                "SELECT name FROM friends WHERE id = %s",
+                (fid,)
+            )
+
             row = cur.fetchone()
+
             if row:
                 split_names.append(row[0])
 
@@ -171,14 +244,25 @@ def add_expense(user_id, group_id, expense_date, description, paid_by, amount, s
             (user_id, group_id, expense_date, description, paid_by, amount, splits)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
-            (user_id, group_id, expense_date, description, paid_by, amount, split_string),
+            (
+                user_id,
+                group_id,
+                expense_date,
+                description,
+                paid_by,
+                amount,
+                split_string,
+            ),
         )
+
         conn.commit()
         return True
+
     except Exception as e:
         print("add_expense error:", e)
         conn.rollback()
         return False
+
     finally:
         cur.close()
         return_connection(conn)
@@ -186,22 +270,31 @@ def add_expense(user_id, group_id, expense_date, description, paid_by, amount, s
 
 def get_expenses(user_id, group_id):
     conn = get_connection()
+
     try:
         query = """
-        SELECT e.id,
-               e.description,
-               e.amount,
-               f.name AS paid_by,
-               e.splits
+        SELECT
+            e.id,
+            e.description,
+            e.amount,
+            f.name AS paid_by,
+            e.splits
         FROM expenses e
-        LEFT JOIN friends f ON e.paid_by = f.id
-        WHERE e.user_id = %s AND e.group_id = %s
+        LEFT JOIN friends f
+            ON e.paid_by = f.id
+        WHERE e.user_id = %s
+        AND e.group_id = %s
         ORDER BY e.id DESC
         """
+
         return pd.read_sql(query, conn, params=(user_id, group_id))
+
     except Exception as e:
         print("get_expenses error:", e)
-        return pd.DataFrame(columns=["id", "description", "amount", "paid_by", "splits"])
+        return pd.DataFrame(
+            columns=["id", "description", "amount", "paid_by", "splits"]
+        )
+
     finally:
         return_connection(conn)
 
@@ -209,6 +302,7 @@ def get_expenses(user_id, group_id):
 # ---------------- PAYMENT FUNCTIONS ----------------
 def get_payments(group_id):
     conn = get_connection()
+
     try:
         query = """
         SELECT id, payer, receiver, amount, status
@@ -216,10 +310,15 @@ def get_payments(group_id):
         WHERE group_id = %s
         ORDER BY id DESC
         """
+
         return pd.read_sql(query, conn, params=(group_id,))
+
     except Exception as e:
         print("get_payments error:", e)
-        return pd.DataFrame(columns=["id", "payer", "receiver", "amount", "status"])
+        return pd.DataFrame(
+            columns=["id", "payer", "receiver", "amount", "status"]
+        )
+
     finally:
         return_connection(conn)
 
@@ -227,6 +326,7 @@ def get_payments(group_id):
 def mark_payment_paid(payment_id):
     conn = get_connection()
     cur = conn.cursor()
+
     try:
         cur.execute(
             """
@@ -236,12 +336,15 @@ def mark_payment_paid(payment_id):
             """,
             (payment_id,),
         )
+
         conn.commit()
         return True
+
     except Exception as e:
         print("mark_payment_paid error:", e)
         conn.rollback()
         return False
+
     finally:
         cur.close()
         return_connection(conn)
