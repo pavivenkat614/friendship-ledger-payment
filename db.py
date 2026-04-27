@@ -1,6 +1,3 @@
-# Updated db.py
-# Uses groups table
-
 import os
 import pandas as pd
 import psycopg2
@@ -88,6 +85,16 @@ def register_user(username, email, password):
     cur = conn.cursor()
 
     try:
+        # basic validation
+        if not username.strip():
+            return "Username cannot be empty"
+
+        if not email.strip():
+            return "Email cannot be empty"
+
+        if not password.strip():
+            return "Password cannot be empty"
+
         cur.execute(
             """
             INSERT INTO users (username, email, password)
@@ -95,12 +102,14 @@ def register_user(username, email, password):
             """,
             (username, email, hash_password(password)),
         )
+
         conn.commit()
         return True
+
     except Exception as e:
-        print("register_user error:", str(e))
         safe_rollback(conn)
-        return False
+        return f"Database Error: {str(e)}"
+
     finally:
         safe_close_cursor(cur)
         return_connection(conn)
