@@ -3,6 +3,8 @@ import pandas as pd
 import psycopg2
 from psycopg2 import pool
 from dotenv import load_dotenv
+import bcrypt
+import re
 
 # ---------------- LOAD ENV ----------------
 load_dotenv()
@@ -16,6 +18,23 @@ DB_PORT = os.getenv("DB_PORT", "5432")
 # ---------------- VALIDATION ----------------
 if not all([DB_HOST, DB_NAME, DB_USER, DB_PASS]):
     raise ValueError("Missing database environment variables. Check your .env file.")
+
+# ---------------- VALIDATION HELPERS ----------------
+def validate_email(email):
+    """Validate email format"""
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
+
+
+def hash_password(password):
+    """Hash password using bcrypt"""
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+
+def verify_password(password, hashed):
+    """Verify password against hashed password"""
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
 
 # ---------------- CONNECTION POOL ----------------
 try:
@@ -58,6 +77,14 @@ def register_user(username, email, password):
     cur = None
 
     try:
+        # Validate email format
+        if not validate_email(email):
+            print("Invalid email format")
+            return False
+
+        # Hash password
+        hashed_password = hash_password(password)
+
         conn = get_connection()
         cur = conn.cursor()
 
@@ -66,7 +93,7 @@ def register_user(username, email, password):
             INSERT INTO users (username, email, password)
             VALUES (%s, %s, %s)
             """,
-            (username, email, password),
+            (username, email, hashed_password),
         )
 
         conn.commit()
@@ -95,16 +122,19 @@ def login_user(username_or_email, password):
     try:
         cur.execute(
             """
-            SELECT id
+            SELECT id, password
             FROM users
             WHERE (username = %s OR email = %s)
-            AND password = %s
             """,
-            (username_or_email, username_or_email, password),
+            (username_or_email, username_or_email),
         )
 
         row = cur.fetchone()
-        return row[0] if row else None
+        
+        if row and verify_password(password, row[1]):
+            return row[0]
+        
+        return None
 
     except Exception as e:
         print("login_user error:", e)
@@ -214,6 +244,29 @@ def get_friends(user_id, group_id):
         return pd.DataFrame(columns=["id", "name", "upi_id"])
 
     finally:
+        return_connection(conn)
+
+
+def get_friend_upi(friend_name):
+    """Get UPI ID by friend name"""
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            "SELECT upi_id FROM friends WHERE name = %s",
+            (friend_name,)
+        )
+
+        row = cur.fetchone()
+        return row[0] if row and row[0] else None
+
+    except Exception as e:
+        print("get_friend_upi error:", e)
+        return None
+
+    finally:
+        cur.close()
         return_connection(conn)
 
 
