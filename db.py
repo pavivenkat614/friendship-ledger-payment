@@ -178,6 +178,23 @@ def login_user(username_or_email, password):
         return_connection(conn)
 
 
+def user_exists(user_id):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute("SELECT 1 FROM users WHERE id = %s", (user_id,))
+        return cur.fetchone() is not None
+
+    except Exception as e:
+        print("user_exists error:", e)
+        return False
+
+    finally:
+        cur.close()
+        return_connection(conn)
+
+
 # ---------------- GROUP FUNCTIONS ----------------
 def create_group(user_id, group_name):
     conn = get_connection()
