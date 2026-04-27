@@ -36,7 +36,27 @@ def get_connection():
 
 
 def return_connection(conn):
-    db_pool.putconn(conn)
+    if conn is not None:
+        try:
+            db_pool.putconn(conn)
+        except Exception:
+            pass
+
+
+def safe_rollback(conn):
+    if conn is not None:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+
+def safe_close_cursor(cur):
+    if cur is not None:
+        try:
+            cur.close()
+        except Exception:
+            pass
 
 
 # ---------------- PASSWORD ----------------
@@ -79,10 +99,10 @@ def register_user(username, email, password):
         return True
     except Exception as e:
         print("register_user error:", str(e))
-        conn.rollback()
+        safe_rollback(conn)
         return False
     finally:
-        cur.close()
+        safe_close_cursor(cur)
         return_connection(conn)
 
 
@@ -104,8 +124,11 @@ def login_user(username_or_email, password):
         if row and verify_password(password, row[1]):
             return row[0]
         return None
+    except Exception as e:
+        print("login_user error:", str(e))
+        return None
     finally:
-        cur.close()
+        safe_close_cursor(cur)
         return_connection(conn)
 
 
@@ -126,10 +149,10 @@ def create_group(user_id, group_name):
         return True
     except Exception as e:
         print("create_group error:", str(e))
-        conn.rollback()
+        safe_rollback(conn)
         return False
     finally:
-        cur.close()
+        safe_close_cursor(cur)
         return_connection(conn)
 
 
@@ -167,10 +190,10 @@ def add_friend(user_id, group_id, name, upi_id):
         return True
     except Exception as e:
         print("add_friend error:", str(e))
-        conn.rollback()
+        safe_rollback(conn)
         return False
     finally:
-        cur.close()
+        safe_close_cursor(cur)
         return_connection(conn)
 
 
@@ -212,10 +235,10 @@ def add_expense(user_id, group_id, expense_date, description, paid_by, amount, s
         return True
     except Exception as e:
         print("add_expense error:", str(e))
-        conn.rollback()
+        safe_rollback(conn)
         return False
     finally:
-        cur.close()
+        safe_close_cursor(cur)
         return_connection(conn)
 
 
