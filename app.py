@@ -1,7 +1,3 @@
-# Updated app.py
-# Uses friend_groups table instead of groups
-# Safer group creation + cleaner flow
-
 import streamlit as st
 import pandas as pd
 import random
@@ -95,14 +91,16 @@ def login_ui():
 
             if st.button("Register"):
                 if otp_in == st.session_state.otp:
-                    if register_user(u, e, p):
-                        st.success("Registered successfully")
-                    else:
-                        st.error("Registration failed")
-                else:
-                    st.error("Invalid OTP")
+                    result = register_user(u, e, p)
 
+            if result is True:
+                st.success("Registered successfully")
+            else:
+                st.error(result)
 
+        else:
+            st.error("Invalid OTP")
+                
 if st.session_state.user_id is None:
     login_ui()
     st.stop()
@@ -138,16 +136,25 @@ if st.button("Create Group"):
 
 
 # ---------------- GROUP SELECT ----------------
+
 groups = get_user_groups(st.session_state.user_id)
 
 if groups.empty:
     st.warning("Create group first")
     st.stop()
 
-group_name = st.selectbox("Select Group", groups["name"])
-gid = int(groups[groups["name"] == group_name]["id"].values[0])
-st.session_state.group_id = gid
+group_map = {
+    row["id"]: row["name"]
+    for _, row in groups.iterrows()
+}
 
+gid = st.selectbox(
+    "Select Group",
+    options=list(group_map.keys()),
+    format_func=lambda x: group_map[x]
+)
+
+st.session_state.group_id = gid
 
 # ---------------- FRIENDS ----------------
 st.subheader("👥 Friends")
@@ -210,4 +217,4 @@ if st.button("Add Expense"):
 # ---------------- EXPENSE TABLE ----------------
 df = get_expenses(st.session_state.user_id, gid)
 st.subheader("📋 Expenses")
-st.dataframe(df, use_container_width=True)
+st.dataframe(df, width="stretch")
