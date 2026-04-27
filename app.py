@@ -137,6 +137,13 @@ if st.session_state.user_id is None:
     login_ui()
     st.stop()
 
+if not user_exists(st.session_state.user_id):
+    st.warning("Your session expired or user no longer exists. Please login again.")
+    st.session_state.user_id = None
+    st.session_state.username = None
+    st.session_state.group_id = None
+    st.rerun()
+
 st.sidebar.success(f"👤 {st.session_state.username}")
 
 if st.sidebar.button("Logout"):
