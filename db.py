@@ -1,10 +1,18 @@
 import os
+import base64
+import hashlib
+import hmac
+import secrets
 import pandas as pd
 import psycopg2
 from psycopg2 import pool
 from dotenv import load_dotenv
-import bcrypt
 import re
+
+try:
+    import bcrypt
+except ImportError:
+    bcrypt = None
 
 # ---------------- LOAD ENV ----------------
 load_dotenv()
@@ -27,13 +35,38 @@ def validate_email(email):
 
 
 def hash_password(password):
-    """Hash password using bcrypt"""
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    """Hash password using bcrypt when available, otherwise PBKDF2."""
+    if bcrypt is not None:
+        return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000)
+    salt_b64 = base64.b64encode(salt).decode("ascii")
+    digest_b64 = base64.b64encode(digest).decode("ascii")
+    return f"pbkdf2_sha256$100000${salt_b64}${digest_b64}"
 
 
 def verify_password(password, hashed):
-    """Verify password against hashed password"""
-    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+    """Verify password against bcrypt or PBKDF2 hashes."""
+    if hashed.startswith("pbkdf2_sha256$"):
+        try:
+            _, iterations, salt_b64, digest_b64 = hashed.split("$", 3)
+            salt = base64.b64decode(salt_b64.encode("ascii"))
+            expected_digest = base64.b64decode(digest_b64.encode("ascii"))
+            actual_digest = hashlib.pbkdf2_hmac(
+                "sha256",
+                password.encode("utf-8"),
+                salt,
+                int(iterations),
+            )
+            return hmac.compare_digest(actual_digest, expected_digest)
+        except (ValueError, TypeError):
+            return False
+
+    if bcrypt is None:
+        return False
+
+    return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
 
 
 # ---------------- CONNECTION POOL ----------------
