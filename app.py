@@ -8,6 +8,7 @@ from io import BytesIO
 import smtplib
 from pathlib import Path
 from dotenv import load_dotenv
+from datetime import datetime
 from db import *
 
 # ---------------- ENV ----------------
@@ -30,25 +31,40 @@ for k in ["user_id", "username", "group_id", "otp", "otp_sent"]:
 
 
 # ---------------- OTP ----------------
+def get_otp_delivery_mode():
+    return os.getenv("OTP_DELIVERY_MODE", "email").strip().lower()
+
+
 def send_otp(email):
     otp = str(random.randint(100000, 999999))
+    otp_delivery_mode = get_otp_delivery_mode()
+
+    st.session_state.otp = otp
+
+    if otp_delivery_mode == "debug":
+        st.info(f"Debug OTP for testing: {otp}")
+        return True
 
     sender = os.getenv("EMAIL_USER")
     password = os.getenv("EMAIL_PASS")
 
+    if not sender or not password:
+        st.error("Email configuration not set. Check your .env file.")
+        return False
+
     msg = f"Subject: OTP\n\nYour OTP is {otp}"
 
     try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as s:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as s:
             s.starttls()
             s.login(sender, password)
             s.sendmail(sender, email, msg)
 
-        st.session_state.otp = otp
         return True
 
     except Exception as e:
-        st.error(e)
+        st.error(f"Failed to send OTP: {str(e)}")
+        st.info("If your network blocks SMTP, set OTP_DELIVERY_MODE=debug in .env and try again.")
         return False
 
 
@@ -95,6 +111,9 @@ def login_ui():
         u = st.text_input("Username", key="r1")
         e = st.text_input("Email", key="r2")
         p = st.text_input("Password", type="password", key="r3")
+
+        if get_otp_delivery_mode() == "debug":
+            st.caption("OTP debug mode is enabled. The generated OTP will be shown in the app.")
 
         if st.button("Send OTP"):
             if send_otp(e):
@@ -166,9 +185,12 @@ upi = st.text_input("UPI ID")
 
 if st.button("Add Friend"):
     if name.strip():
-        add_friend(st.session_state.user_id, gid, name.strip(), upi.strip())
-        st.success("Friend added")
-        st.rerun()
+        if not upi.strip():
+            st.warning("Please enter UPI ID")
+        else:
+            add_friend(st.session_state.user_id, gid, name.strip(), upi.strip())
+            st.success("Friend added")
+            st.rerun()
     else:
         st.warning("Please enter friend name")
 
@@ -199,10 +221,11 @@ split = st.multiselect(
 
 if st.button("Add Expense"):
     if desc.strip() and amt > 0 and len(split) > 0:
+        expense_date = datetime.now().strftime("%Y-%m-%d")
         add_expense(
             st.session_state.user_id,
             gid,
-            "2026-01-01",
+            expense_date,
             desc.strip(),
             int(payer),
             float(amt),
@@ -262,8 +285,12 @@ for _, p in payments.iterrows():
     if p["status"] == "PAID":
         st.success("Paid")
     else:
-        link = generate_upi(p["amount"], "dummy@upi", p["receiver"])
-        st.link_button("Pay Now", link)
+        receiver_upi = get_friend_upi(p["receiver"])
+        if receiver_upi:
+            link = generate_upi(p["amount"], receiver_upi, p["receiver"])
+            st.link_button("Pay Now", link)
+        else:
+            st.warning(f"UPI not set for {p['receiver']}")
 
         if st.button("Mark Paid", key=p["id"]):
             mark_payment_paid(p["id"])
