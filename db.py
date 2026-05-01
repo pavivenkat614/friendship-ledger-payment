@@ -78,6 +78,42 @@ def verify_password(password, stored):
     except Exception:
         return False
 
+# -------fallback -------
+def login_user(username_or_email, password):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute("""
+            SELECT id, password
+            FROM users
+            WHERE username=%s OR email=%s
+        """, (username_or_email, username_or_email))
+
+        row = cur.fetchone()
+
+        if not row:
+            return None
+
+        stored_password = row[1]
+
+        # ✅ FIX: handle both hashed + old plain text
+        if stored_password.startswith("pbkdf2$"):
+            if verify_password(password, stored_password):
+                return row[0]
+        else:
+            # fallback (old users)
+            if password == stored_password:
+                return row[0]
+
+        return None
+
+    except Exception as e:
+        print("login_user error:", str(e))
+        return None
+    finally:
+        safe_close_cursor(cur)
+        return_connection(conn)
 
 # ---------------- USERS ----------------
 def register_user(username, email, password):
