@@ -93,13 +93,12 @@ def login_ui():
                 if otp_in == st.session_state.otp:
                     result = register_user(u, e, p)
 
-            if result is True:
-                st.success("Registered successfully")
+                    if result is True:
+                        st.success("Registered successfully")
+                    else:
+                        st.error(result)
             else:
-                st.error(result)
-
-        else:
-            st.error("Invalid OTP")
+                st.error("Invalid OTP")
                 
 if st.session_state.user_id is None:
     login_ui()
